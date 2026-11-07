@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f3f6fb">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <title>Threadlet</title>
+</head>
+<body>
+  <header class="top">
+    <h1>Threadlet</h1>
+    <div class="top-right">
+      <span id="whoami" class="muted" hidden></span>
+      <button id="logoutBtn" class="act" type="button" hidden>Log out</button>
+      <button id="themeBtn" class="icon-btn" type="button" aria-label="Switch theme">◐</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Sign up / log in -->
+    <section id="auth" class="composer auth-card" aria-label="Account" hidden>
+      <div class="tabs">
+        <button id="tabLogin" class="tab on" type="button">Log in</button>
+        <button id="tabSignup" class="tab" type="button">Sign up</button>
+      </div>
+         <input id="authEmail" class="field" type="email" placeholder="Email" autocomplete="email" hidden>
+      <input id="authUser" class="field" placeholder="Username" maxlength="20"
+             autocomplete="username" autocapitalize="none" spellcheck="false">
+      <input id="authPass" class="field" type="password" placeholder="Password (6+ characters)"
+             autocomplete="current-password">
+      <p id="authError" class="error" role="alert" hidden></p>
+      <button id="authBtn" class="primary wide" type="button">Log in</button>
+      <p class="muted">Accounts are stored only on this device until the backend is added.</p>
+    </section>
+
+    <!-- Main app -->
+    <div id="appView" hidden>
+      <section class="composer" aria-label="New post">
+        <textarea id="postText" rows="3" maxlength="500" placeholder="Start a thread…"></textarea>
+
+        <div id="previewWrap" class="preview" hidden>
+          <img id="preview" alt="Preview of the photo you selected">
+          <button id="removeImg" class="icon-btn small" type="button" aria-label="Remove photo">✕</button>
+        </div>
+
+        <div class="composer-row">
+          <button id="photoBtn" class="act" type="button">📷 Photo</button>
+          <input id="photoInput" type="file" accept="image/*" hidden>
+          <span id="counter" class="muted counter">500</span>
+          <button id="postBtn" class="primary" type="button" disabled>Post</button>
+        </div>
+      </section>
+
+      <section id="feed" aria-live="polite"></section>
+      <p id="empty" class="muted center" hidden>No threads yet. Write the first one above.</p>
+      
+      <!-- for backup -->      
+      <section class="composer" aria-label="Backup">
+  <strong>Backup</strong>
+  <p class="muted">Saves your accounts, posts and photos to a file on this phone. Nothing is sent anywhere.</p>
+  <input id="backupPass" class="field" type="password" placeholder="Optional passphrase to encrypt the file" autocomplete="new-password">
+  <div class="composer-row">
+    <button id="backupBtn" class="primary" type="button">Download backup</button>
+    <button id="copyBtn" class="act" type="button">Copy</button>
+    <button id="restoreBtn" class="act" type="button">Restore</button>
+    <input id="restoreInput" type="file" accept=".json,application/json" hidden>
+  </div>
+  <p id="backupMsg" class="muted" role="status"></p>
+</section>
+      <!-- finish here -->
+      
+      </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
