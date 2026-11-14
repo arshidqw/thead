@@ -316,86 +316,294 @@
     clearPhoto();
     render();
   });
+
   
-    // ---------- backup / restore ----------
-  
+  // ---------- secure personal backup / restore ----------
+
   const b64 = bytes => {
     let s = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
     return btoa(s);
   };
-  const unb64 = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
-  const backupMsg = m => { $("backupMsg").textContent = m; };
 
-  async function deriveKey(pass, salt) {
-    if (!(window.crypto && crypto.subtle)) throw new Error("Encryption needs HTTPS or localhost.");
-    const base = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
+  const unb64 = str =>
+    Uint8Array.from(atob(str), c => c.charCodeAt(0));
+
+  const backupMsg = message => {
+    $("backupMsg").textContent = message;
+  };
+
+  async function deriveBackupKey(pass, salt) {
+    if (!(window.crypto && crypto.subtle)) {
+      throw new Error("Encryption requires HTTPS or localhost.");
+    }
+
+    const base = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(pass),
+      "PBKDF2",
+      false,
+      ["deriveKey"]
+    );
+
     return crypto.subtle.deriveKey(
-      { name: "PBKDF2", salt, iterations: 200000, hash: "SHA-256" },
-      base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+      {
+        name: "PBKDF2",
+        salt,
+        iterations: 200000,
+        hash: "SHA-256"
+      },
+      base,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"]
+    );
   }
 
   async function buildBackup() {
-    const data = { app: "threadlet", version: 1, created: new Date().toISOString(),
-                   users: read(USERS_KEY, {}), posts };
-    const json = JSON.stringify(data);
+    if (!me) {
+      throw new Error("Please log in before creating a backup.");
+    }
+
     const pass = $("backupPass").value;
-    if (!pass) return json;
+
+    if (pass.length < 10) {
+      throw new Error("Enter a passphrase with at least 10 characters.");
+    }
+
+    // Export only posts created by the logged-in user.
+    // Replies attached to those posts are preserved.
+    const myPosts = posts.filter(post => post.user === me);
+
+    const backupData = {
+      app: "threadlet",
+      version: 2,
+      created: new Date().toISOString(),
+      owner: me,
+      posts: myPosts
+    };
+
+    const json = JSON.stringify(backupData);
+
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const key = await deriveKey(pass, salt);
-    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(json));
-    return JSON.stringify({ app: "threadlet", encrypted: true,
-                            salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(ct)) });
+
+    const key = await deriveBackupKey(pass, salt);
+
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      key,
+      enc.encode(json)
+    );
+
+    // Only encrypted data is placed in the backup file.
+    return JSON.stringify({
+      app: "threadlet",
+      encrypted: true,
+      salt: b64(salt),
+      iv: b64(iv),
+      data: b64(new Uint8Array(encrypted))
+    });
   }
 
   $("backupBtn").onclick = async () => {
     try {
-      const blob = new Blob([await buildBackup()], { type: "application/json" });
+      backupMsg("Creating encrypted backup...");
+
+      const backup = await buildBackup();
+
+      const blob = new Blob(
+        [backup],
+        { type: "application/json" }
+      );
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
+
       a.href = url;
-      a.download = "threadlet-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+      a.download =
+        "threadlet-backup-" +
+        new Date().toISOString().slice(0, 10) +
+        ".json";
+
       a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
-      backupMsg("Backup saved to your Downloads. Move it somewhere safe, then delete it from Downloads.");
-    } catch (e) { backupMsg(e.message || "Backup failed."); }
+
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+      backupMsg(
+        "Encrypted backup downloaded. Keep your passphrase safe."
+      );
+
+    } catch (error) {
+      backupMsg(error.message || "Backup failed.");
+    }
   };
 
   $("copyBtn").onclick = async () => {
     try {
-      await navigator.clipboard.writeText(await buildBackup());
-      backupMsg("Backup copied. Paste it somewhere private, then clear your clipboard.");
-    } catch (e) { backupMsg("Could not copy. Use Download backup instead."); }
+      backupMsg("Creating encrypted backup...");
+
+      const backup = await buildBackup();
+
+      if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        throw new Error("Clipboard unavailable. Use Download backup.");
+      }
+
+      await navigator.clipboard.writeText(backup);
+
+      backupMsg(
+        "Encrypted backup copied. Keep it private and clear your clipboard."
+      );
+
+    } catch (error) {
+      backupMsg(error.message || "Could not copy backup.");
+    }
   };
 
-  $("restoreBtn").onclick = () => $("restoreInput").click();
+  $("restoreBtn").onclick = () => {
+    if (!me) {
+      backupMsg("Please log in before restoring a backup.");
+      return;
+    }
+
+    $("restoreInput").click();
+  };
+
   $("restoreInput").addEventListener("change", async () => {
     const file = $("restoreInput").files[0];
     $("restoreInput").value = "";
+
     if (!file) return;
+
     try {
-      let data = JSON.parse(await file.text());
-      if (data.app !== "threadlet") throw new Error("This is not a Threadlet backup.");
-      if (data.encrypted) {
-        const pass = $("backupPass").value;
-        if (!pass) throw new Error("Type the passphrase above, then choose the file again.");
-        const key = await deriveKey(pass, unb64(data.salt));
-        let plain;
-        try {
-          plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(data.iv) }, key, unb64(data.data));
-        } catch (e) { throw new Error("Wrong passphrase, or the file was changed."); }
-        data = JSON.parse(new TextDecoder().decode(plain));
+      if (file.size > 50 * 1024 * 1024) {
+        throw new Error("Backup is too large. Maximum size is 50 MB.");
       }
-      if (!data.users || typeof data.users !== "object" || !Array.isArray(data.posts)) {
-        throw new Error("The backup file is damaged.");
+
+      const envelope = JSON.parse(await file.text());
+
+      if (
+        envelope.app !== "threadlet" ||
+        envelope.encrypted !== true ||
+        typeof envelope.salt !== "string" ||
+        typeof envelope.iv !== "string" ||
+        typeof envelope.data !== "string"
+      ) {
+        throw new Error(
+          "Invalid or unencrypted backup. Create a new encrypted backup."
+        );
       }
-      if (!confirm("Restore this backup? It replaces the posts on this device.")) return;
-      const merged = Object.assign({}, read(USERS_KEY, {}), data.users);
-      if (!write(USERS_KEY, merged) || !write(POSTS_KEY, data.posts)) throw new Error("Storage is full.");
+
+      const pass = $("backupPass").value;
+
+      if (pass.length < 10) {
+        throw new Error(
+          "Enter the backup's passphrase (at least 10 characters)."
+        );
+      }
+
+      const salt = unb64(envelope.salt);
+      const iv = unb64(envelope.iv);
+      const encrypted = unb64(envelope.data);
+
+      if (salt.length !== 16 || iv.length !== 12) {
+        throw new Error("Invalid backup encryption data.");
+      }
+
+      const key = await deriveBackupKey(pass, salt);
+
+      let plain;
+
+      try {
+        plain = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv },
+          key,
+          encrypted
+        );
+      } catch (error) {
+        throw new Error("Wrong passphrase or damaged backup file.");
+      }
+
+      const data = JSON.parse(new TextDecoder().decode(plain));
+
+      if (
+        data.app !== "threadlet" ||
+        data.version !== 2 ||
+        data.owner !== me ||
+        !Array.isArray(data.posts)
+      ) {
+        throw new Error(
+          "This backup is invalid or belongs to another username."
+        );
+      }
+
+      // Validate the imported posts before changing stored data.
+      for (const post of data.posts) {
+        if (
+          !post ||
+          post.user !== me ||
+          !Number.isFinite(post.id) ||
+          typeof post.text !== "string" ||
+          !Number.isFinite(post.time) ||
+          !(post.image === null || typeof post.image === "string") ||
+          !Array.isArray(post.replies)
+        ) {
+          throw new Error("The backup contains invalid post data.");
+        }
+
+        if (
+          post.image !== null &&
+          !post.image.startsWith("data:image/")
+        ) {
+          throw new Error("The backup contains an invalid image.");
+        }
+
+        for (const reply of post.replies) {
+          if (
+            !reply ||
+            !Number.isFinite(reply.id) ||
+            typeof reply.user !== "string" ||
+            typeof reply.text !== "string" ||
+            !Number.isFinite(reply.time)
+          ) {
+            throw new Error("The backup contains invalid reply data.");
+          }
+        }
+      }
+
+      if (
+        !confirm(
+          "Restore this backup for " + me +
+          "? Your existing posts will be replaced by the backed-up posts. Other users' posts will remain."
+        )
+      ) {
+        return;
+      }
+
+      // Keep other users' posts and replace only your own posts.
+      const otherPosts = posts.filter(post => post.user !== me);
+
+      const restoredPosts = otherPosts
+        .concat(data.posts)
+        .sort((a, b) => b.time - a.time);
+
+      if (!write(POSTS_KEY, restoredPosts)) {
+        throw new Error("Not enough storage space to restore this backup.");
+      }
+
+      backupMsg("Backup restored successfully.");
+
       location.reload();
-    } catch (e) { backupMsg(e.message || "Restore failed."); }
+
+    } catch (error) {
+      backupMsg(error.message || "Restore failed.");
+    }
   });
+
+  // ---------- end secure backup / restore ----------
+                           
 
   // ---------- theme ----------
   const root = document.documentElement;
