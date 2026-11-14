@@ -58,20 +58,11 @@
       <section id="feed" aria-live="polite"></section>
       <p id="empty" class="muted center" hidden>No threads yet. Write the first one above.</p>
       
-      <!-- for backup -->      
-      <section class="composer" aria-label="Backup">
-  <strong>Backup</strong>
-  <p class="muted">Saves your accounts, posts and photos to a file on this phone. Nothing is sent anywhere.</p>
-  <input id="backupPass" class="field" type="password" placeholder="Optional passphrase to encrypt the file" autocomplete="new-password">
-  <div class="composer-row">
-    <button id="backupBtn" class="primary" type="button">Download backup</button>
-    <button id="copyBtn" class="act" type="button">Copy</button>
-    <button id="restoreBtn" class="act" type="button">Restore</button>
-    <input id="restoreInput" type="file" accept=".json,application/json" hidden>
-  </div>
-  <p id="backupMsg" class="muted" role="status"></p>
-</section>
-      <!-- finish here -->
+      <p class="muted">Creates an encrypted backup of your posts, replies and photos. The backup stays on this phone unless you move the file yourself.</p>
+
+<input id="backupPass" class="field" type="password"
+       placeholder="Backup passphrase (at least 10 characters)"
+       autocomplete="new-password">
       
       </div>
   </main>
